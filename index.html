@@ -164,25 +164,41 @@ function flashSync(){
 /* ================= 撤销 / 重做（命令模式，撤销本身也是新事件，可同步） ================= */
 const undoStack=[],redoStack=[];
 const stripEv=ev=>{const e={...ev};delete e.id;delete e.ts;return e;};
+/* 冲突守卫：记录操作生效后对象应处的状态。执行撤销/重做前校验，
+   若对象已被其他标签更新（状态不再匹配），该条目过期——丢弃而不是覆盖较新版本。 */
+function guardOf(ev){
+  if(ev.kind==='add')return{objId:ev.obj.id,expect:clone(ev.obj)};
+  if(ev.kind==='remove')return{objId:ev.objId,absent:true};
+  return{objId:ev.objId,expect:{...ev.patch}};
+}
+function guardOK(g){
+  const o=state.objects[g.objId];
+  if(g.absent)return!o;
+  if(!o)return false;
+  return Object.keys(g.expect).every(k=>o[k]===g.expect[k]);
+}
 function commit(doEv,undoEv,label,mergeKey){
   const ev={...doEv,id:uid(),ts:Date.now()};
   applyEvent(ev);broadcast(ev);
   const now=Date.now(),top=undoStack[undoStack.length-1];
   if(mergeKey&&top&&top.mergeKey===mergeKey&&now-top.time<900){
-    top.redoEv=stripEv(ev);top.time=now;              // 合并连续微调
+    top.redoEv=stripEv(ev);top.undoGuard=guardOf(ev);top.time=now; // 合并连续微调
   }else{
-    undoStack.push({label,mergeKey,time:now,redoEv:stripEv(ev),undoEv});
+    undoStack.push({label,mergeKey,time:now,redoEv:stripEv(ev),undoEv,
+                    undoGuard:guardOf(ev),redoGuard:guardOf(undoEv)});
     if(undoStack.length>200)undoStack.shift();
   }
   redoStack.length=0;updateUndoUI();
 }
 function undo(){
   const c=undoStack.pop();if(!c)return;
+  if(!guardOK(c.undoGuard)){updateUndoUI();toastMsg('已跳过过期撤销：'+c.label+'（对象已被其他标签页更新）');return;}
   const ev={...c.undoEv,id:uid(),ts:Date.now()};
   applyEvent(ev);broadcast(ev);redoStack.push(c);updateUndoUI();toastMsg('已撤销：'+c.label);
 }
 function redo(){
   const c=redoStack.pop();if(!c)return;
+  if(!guardOK(c.redoGuard)){updateUndoUI();toastMsg('已跳过过期重做：'+c.label+'（对象已被其他标签页更新）');return;}
   const ev={...c.redoEv,id:uid(),ts:Date.now()};
   applyEvent(ev);broadcast(ev);undoStack.push(c);updateUndoUI();toastMsg('已重做：'+c.label);
 }
