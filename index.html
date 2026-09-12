@@ -178,11 +178,14 @@ function guardOK(g){
   return Object.keys(g.expect).every(k=>o[k]===g.expect[k]);
 }
 function commit(doEv,undoEv,label,mergeKey){
+  const now=Date.now(),top=undoStack[undoStack.length-1];
+  /* 合并连续微调的前提：栈顶条目的守卫仍成立（上次微调后对象未被远端更新），
+     否则另起新条目——旧快照立即过期，撤销不会把远端位置回退到最初值。 */
+  const canMerge=!!(mergeKey&&top&&top.mergeKey===mergeKey&&now-top.time<900&&guardOK(top.undoGuard));
   const ev={...doEv,id:uid(),ts:Date.now()};
   applyEvent(ev);broadcast(ev);
-  const now=Date.now(),top=undoStack[undoStack.length-1];
-  if(mergeKey&&top&&top.mergeKey===mergeKey&&now-top.time<900){
-    top.redoEv=stripEv(ev);top.undoGuard=guardOf(ev);top.time=now; // 合并连续微调
+  if(canMerge){
+    top.redoEv=stripEv(ev);top.undoGuard=guardOf(ev);top.time=now;
   }else{
     undoStack.push({label,mergeKey,time:now,redoEv:stripEv(ev),undoEv,
                     undoGuard:guardOf(ev),redoGuard:guardOf(undoEv)});
