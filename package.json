@@ -1,0 +1,15 @@
+{
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "纯前端协作白板演示，打开 `index.html` 即可体验。包含房间链接模拟、便签/文本/图形/连线、成员光标、拖拽、撤销、颜色筛选和 PNG 导出入口。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "puppeteer-core": "^24.43.1"
+  }
+}
